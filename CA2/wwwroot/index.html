@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1320">
+<title>CA2 Dam Valve Monitor</title>
+<style>
+:root{color-scheme:dark;--bg:#0c121e;--panel:#172335;--line:#2e4056;--text:#eff5ff;--muted:#a3b4c9;--blue:#4dbff8;--red:#ff6872;--green:#39d59b;--orange:#ffb15c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font:15px/1.5 "Segoe UI",Arial,sans-serif;color:var(--text)}
+main{max-width:1000px;margin:auto;padding:38px 24px 60px}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:26px}
+h1{font-size:30px;line-height:1.2;letter-spacing:-.5px;margin:0}
+small,.sub{color:var(--muted)}
+.sub{margin:6px 0 0;font-size:14px}
+.connection{border:1px solid var(--line);border-radius:22px;padding:8px 13px;background:var(--panel);font-size:13px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--orange)}
+.connection.live .dot{background:var(--green);box-shadow:0 0 8px #39d59b70}
+.connection.offline .dot{background:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.card{border-radius:16px;background:var(--panel);border:1px solid var(--line);padding:23px;min-width:0}
+h2{font-size:14px;font-weight:600;color:var(--muted);margin:0 0 21px}
+.lamp-row{display:flex;align-items:center;gap:20px;min-height:85px}
+.lamp{width:72px;height:72px;flex:none;border-radius:50%;border:5px solid #27374a;background:#34465a;box-shadow:inset 0 5px 13px #02070c88;transition:background .2s,box-shadow .2s}
+.lamp.sensor.active{background:var(--red);box-shadow:0 0 30px #ff687266,inset 0 0 12px #ffddd777}
+.lamp.button.active{background:var(--green);box-shadow:0 0 30px #39d59b55,inset 0 0 12px #d6ffea77}
+.value-label{font-weight:700;font-size:25px;letter-spacing:-.25px}
+.description{color:var(--muted);font-size:13px;margin-top:2px}
+.full{grid-column:1/-1}
+.water-row{display:flex;align-items:center;gap:35px;flex-wrap:wrap}
+.tank{width:112px;height:214px;position:relative;overflow:hidden;background:#0e1928;border:3px solid #647c96;border-radius:14px 14px 22px 22px;flex:none}
+.water{position:absolute;bottom:0;left:0;right:0;height:0%;background:linear-gradient(#47c6fb,#1a78bb);transition:height .55s ease}
+.water:before{content:"";height:5px;position:absolute;top:0;left:0;right:0;background:#d6ffff77}
+.threshold{position:absolute;bottom:70%;left:0;right:0;border-top:2px dashed var(--orange);z-index:1}
+.level-text{flex:1;min-width:200px}
+.volume{font-size:clamp(28px,5vw,44px);font-weight:750;letter-spacing:-.8px;line-height:1.2}
+.unit{color:var(--muted);font-size:20px;font-weight:400}
+.progress-track{height:9px;border-radius:8px;background:#31445b;overflow:hidden;max-width:350px;margin:17px 0 6px}
+.progress-fill{height:100%;background:var(--blue);width:0%;transition:width .55s ease}
+.note{color:var(--orange);font-size:13px;min-height:18px;margin-top:8px}
+.messages{margin-top:17px}
+.rows{display:grid;gap:1px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:grid;grid-template-columns:190px 1fr;gap:12px;padding:15px 16px;background:#101b2a;align-items:start}
+.row+.row{border-top:1px solid var(--line)}
+.name{color:var(--muted);font-size:13px}
+.msg{overflow-wrap:anywhere}
+#warningRow .msg{color:var(--red)}
+#maintenanceRow .msg{color:var(--orange)}
+footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:20px;color:var(--muted);font-size:12px}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:24px 14px 40px}h1{font-size:25px}.grid{grid-template-columns:1fr}.full{grid-column:auto}.row{grid-template-columns:1fr;gap:2px}.card{padding:18px}.tank{width:99px;height:180px}.water-row{gap:18px}.volume{font-size:30px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>CA2 Dam Valve Monitor</h1>
+      <p class="sub">WAGO PLC · Device <span id="deviceId">plc047</span> · Live MQTT readings</p>
+    </div>
+    <div id="connection" class="connection"><span class="dot"></span><span id="connectionLabel">Connecting to MQTT...</span></div>
+  </header>
+
+  <section class="grid" aria-label="PLC readings">
+    <article class="card">
+      <h2>Maximum level sensor · DI2</h2>
+      <div class="lamp-row">
+        <div id="sensorLamp" class="lamp sensor" aria-hidden="true"></div>
+        <div><div class="value-label" id="sensorState">NO DATA</div><div class="description">Red = limit detected</div></div>
+      </div>
+    </article>
+    <article class="card">
+      <h2>Confirmation button · DI1</h2>
+      <div class="lamp-row">
+        <div id="buttonLamp" class="lamp button" aria-hidden="true"></div>
+        <div><div class="value-label" id="buttonState">NO DATA</div><div class="description">Green = button pressed</div></div>
+      </div>
+    </article>
+    <article class="card full">
+      <h2>Water level</h2>
+      <div class="water-row">
+        <div class="tank" role="img" aria-label="Water level tank, maximum scale 1 million cubic metres">
+          <div class="water" id="waterFill"></div><div class="threshold"></div>
+        </div>
+        <div class="level-text">
+          <div class="volume"><span id="volumeValue">--</span> <span class="unit">m³</span></div>
+          <div class="description" id="levelPercent">Waiting for PLC volume</div>
+          <div class="progress-track"><div class="progress-fill" id="levelBar"></div></div>
+          <div class="description">Orange line: 700,000 m³ warning threshold</div>
+          <div class="description">Analog reading: <span id="analogValue">--</span></div>
+          <div id="volumeNote" class="note"></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <article class="card messages">
+    <h2>PLC status messages</h2>
+    <div class="rows" aria-live="polite">
+      <div class="row"><div class="name">System status</div><div class="msg" id="systemStatus">Waiting for PLC</div></div>
+      <div class="row"><div class="name">Confirmation status</div><div class="msg" id="confirmationStatus">Waiting for PLC</div></div>
+      <div class="row"><div class="name">Confirmation message</div><div class="msg" id="confirmationMessage">Waiting for PLC</div></div>
+      <div class="row" id="warningRow" hidden><div class="name">Warning</div><div class="msg" id="warningMessage"></div></div>
+      <div class="row" id="maintenanceRow" hidden><div class="name">Maintenance message</div><div class="msg" id="maintenanceMessage"></div></div>
+    </div>
+  </article>
+  <footer><span>Last PLC message: <span id="updated">None yet</span></span><span id="error"></span></footer>
+</main>
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+function lamp(type, value) {
+  const known = value === 0 || value === 1;
+  const active = value === 1;
+  el(type + 'Lamp').classList.toggle('active', active);
+  el(type + 'State').textContent = !known ? 'NO DATA'
+    : type === 'sensor' ? (active ? 'TRIGGERED' : 'CLEAR') : (active ? 'PRESSED' : 'RELEASED');
+}
+function message(id, value) {
+  el(id).textContent = typeof value === 'string' && value.trim() ? value : '—';
+}
+function display(data) {
+  const lastUpdate = data.lastUpdated ? new Date(data.lastUpdated) : null;
+  const stale = lastUpdate && (Date.now() - lastUpdate.getTime()) > 15000;
+  const connection = el('connection');
+  connection.className = 'connection ' + (data.connected ? (stale ? '' : 'live') : 'offline');
+  el('connectionLabel').textContent = !data.connected ? 'MQTT disconnected'
+    : !lastUpdate ? 'Connected — waiting for PLC'
+    : stale ? 'PLC data delayed' : 'MQTT connected';
+  el('deviceId').textContent = data.deviceId || 'plc047';
+  lamp('sensor', data.sensorPnp);
+  lamp('button', data.confirmButton);
+  const volume = data.waterVolumeM3;
+  if (typeof volume === 'number' && Number.isFinite(volume)) {
+    const percent = Math.max(0, Math.min(100, volume / 1000000 * 100));
+    el('volumeValue').textContent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(volume);
+    el('levelPercent').textContent = percent.toFixed(1) + '% of 1,000,000 m³ display scale';
+    el('waterFill').style.height = percent + '%';
+    el('levelBar').style.width = percent + '%';
+    el('volumeNote').textContent = (volume < 0 || volume > 1000000)
+      ? 'Outside tank display scale. Value shown exactly as received from PLC.' : '';
+  } else {
+    el('volumeValue').textContent = '--';
+    el('levelPercent').textContent = 'Waiting for PLC volume';
+    el('waterFill').style.height = '0%';
+    el('levelBar').style.width = '0%';
+    el('volumeNote').textContent = '';
+  }
+  el('analogValue').textContent = typeof data.analogReading === 'number' ? data.analogReading : '--';
+  message('systemStatus', data.systemStatus);
+  message('confirmationStatus', data.confirmationStatus);
+  message('confirmationMessage', data.confirmationMessage);
+  for (const type of ['warning', 'maintenance']) {
+    const value = data[type + 'Message'];
+    el(type + 'Row').hidden = !value || !String(value).trim();
+    el(type + 'Message').textContent = value || '';
+  }
+  el('updated').textContent = lastUpdate && !Number.isNaN(lastUpdate.getTime()) ? lastUpdate.toLocaleTimeString() : 'None yet';
+  el('error').textContent = data.error || '';
+}
+async function refresh() {
+  try {
+    const response = await fetch('/api/reading', { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    display(await response.json());
+  } catch (error) {
+    el('connection').className = 'connection offline';
+    el('connectionLabel').textContent = 'Cannot reach local web app';
+    el('error').textContent = error.message;
+  }
+}
+refresh();
+setInterval(refresh, 250);
+</script>
+</body>
+</html>

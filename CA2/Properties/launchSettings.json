@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "CA2 Dam Valve Monitor": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://localhost:5188"
+    }
+  }
+}
